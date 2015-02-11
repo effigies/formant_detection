@@ -1,4 +1,3 @@
-#!/usr/bin/praat
 ##    takes directory of sound files and loops through them to calculate F1, F2, F3, and pitch
 ##
 ##
@@ -11,7 +10,7 @@
 
 # no information will be provided for skipped files
 procedure skipSound fname$ skipMsg$
-    fileappend 'fname$' 'fileNameAbbrev$' 'tab$' 'skipMsg$' 'newline$'
+    fileappend 'fname$' 'fileNameAbbrev$''tab$''skipMsg$''newline$'
 endproc
 
 procedure extractSound
@@ -38,8 +37,9 @@ procedure findFormant
     t = 0
 
     ## find pitch values
+    select Sound 'fileNameAbbrev$'
     noprogress To Pitch... 0 pitchFloor pitchCeiling
-    pitch = Get mean... 0 0 Hertz
+    .pitch = Get mean... 0 0 Hertz
     select Pitch 'fileNameAbbrev$'
     Remove
     select Sound 'fileNameAbbrev$'
@@ -83,25 +83,15 @@ procedure findFormant
     endif
 
     ## retrieve F1, F2, F3 values as a mean over a 0.07sec-selection
-    v1f1 = Get mean... 1 (t-0.035) (t+0.035) Hertz
-    v1f2 = Get mean... 2 (t-0.035) (t+0.035) Hertz
-    v1f3 = Get mean... 3 (t-0.035) (t+0.035) Hertz
+    .v1f1 = Get mean... 1 (t-0.035) (t+0.035) Hertz
+    .v1f2 = Get mean... 2 (t-0.035) (t+0.035) Hertz
+    .v1f3 = Get mean... 3 (t-0.035) (t+0.035) Hertz
 
     ## output
     ## for all sound files except txl, because extraction
     ## was performed, time t needs to be readjusted to reflect
     ## the original sound file's times
-    #if not (first_char$ = "t" and last_char$ = "l")
-        t = t + start_time_sound
-
-    #endif
-
-
-    fileappend 'listDir$'/'outFile$' 'fileNameAbbrev$' 'tab$' 'mid_char$' 'tab$' 't:8' 'tab$'  'v1f1:8' 'tab$'  'v1f2:8' 'tab$'  'v1f3:8' 'tab$' 'pitch:8' 'newline$'
-    #appendInfoLine: fileNameAbbrev$
-    #appendInfoLine: "time :" + string$(t-0.035) +  " - " + string$(t+0.035)            #appendInfoLine: v1f1
-    #appendInfoLine: v1f2
-
+    .t = t + start_time_sound
 endproc
 
 

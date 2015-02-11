@@ -1,24 +1,18 @@
-#!/usr/bin/praat
-##    takes directory of sound files and loops through them to calculate F1, F2, F3, and pitch
+##    takes directory of sound files and loops through them
+##  calculating the mean F1, F2, and F3 values around a user-designated midpoint
+##     also outputs vowel, time of midpoint and the average pitch of the file
 ##
-##
-##  for remaining syllable types:
-##     finding the section of the sound file with the highest median f1 value
-##     and using that time point as the midpoint from which to calculate F1,
-##    F2, and F3 over a 0.07 sec interval
-##
-##    in all cases, pitch is an average calculated over entire sound file
 
 clearinfo
 include subprocs.praat
 
 ## prompt
-form Formant Detection v10: Syllable Repetition Task
+form Formant Detection v4: Syllable Repetition Task
     comment Enter base sound file directory
     text baseDirectory /share/qnl2/fMRI/syllable_repetition/formants.new/sound_files
     comment Enter metadata directory
     text metadataDirectory /share/qnl-linux1/fs_sess_metadata
-    choice speaker: 2
+    choice speaker: 21
         button All Speakers
         button All Subjects
         button All Stimuli
@@ -43,14 +37,18 @@ form Formant Detection v10: Syllable Repetition Task
         button Subject 15 (M)
         button Subject 16 (F)
         button Subject 17 (F)
+    boolean automatic 0
     comment Output file name
-    text outFile formant-values-auto-v10.tsv
+    text outFile formant-values-auto-v4.tsv
     comment Enter window length for choosing time of F1 values:
     real chooseFWindLength 0.03
     comment Enter window length for formants
     real formantWindLength 0.025
 endform
 
+#
+# Choose speakers to run
+#
 if (speaker$ = "All Stimuli") or (speaker$ = "All Speakers")
     for i from 1 to 4
         if i mod 2 = 1
@@ -121,7 +119,7 @@ procedure runSpeaker speakerx$
 
     ## header for file
     #fileappend 'listDir$'/'outFile$' 'gender$' - 'listDir$' 'newline$'
-    fileappend 'listDir$'/'outFile$' File Name 'tab$' vowel'tab$' time (sec) 'tab$' F1 'tab$' F2 'tab$' F3 'tab$' Pitch 'newline$'
+    fileappend 'listDir$'/'outFile$' File Name'tab$'vowel'tab$'time (sec)'tab$'F1'tab$'F2'tab$'F3'tab$'Pitch'newline$'
 
     ## loops through .wav files and outputs F1, F2 values
     for ifile to numberOfFiles
@@ -141,42 +139,97 @@ procedure runSpeaker speakerx$
         last_char$ = right$(word$, 1)
         mid_char$ = mid$(word$, 2, 1)
 
+        #
+        # Steal estimates from v10
+        #
         end_time_sound = Get total duration
         start_time_sound = 0
 
-        # for txl, because intensity slopes down in the vowel, this has to be processed differently
-        # sound cannot be extracted for txl
+        select Sound 'fileNameAbbrev$'
+        noprogress To PointProcess (periodic, cc)... 75 600
+        numPoints = Get number of points
 
-        ## convert Sound to PointProcess (pulses) to obtain relevant time area in file to focus on
-        #if not (first_char$ = 't' and last_char$ = 'l')
-            select Sound 'fileNameAbbrev$'
-            noprogress To PointProcess (periodic, cc)... 75 600
-            numPoints = Get number of points
-
-            #"noise" files tend to have 0 points
-            if numPoints <= 0
-                call skipSound 'listDir$'/'outFile$' skipped
-            else
-                call extractSound
-            endif
-
-        #endif
+        #"noise" files tend to have 0 points
+        if numPoints <= 0
+            hint = 0
+        else
+            call extractSound
+        endif
 
         total_time = Get total duration
 
         if numPoints > 0 and total_time >= (6.4/100)
             call findFormant
-            fileappend 'listDir$'/'outFile$' 'fileNameAbbrev$''tab$''mid_char$''tab$''findFormant.t:8''tab$''findFormant.v1f1:8''tab$''findFormant.v1f2:8''tab$''findFormant.v1f3:8''tab$''findFormant.pitch:8''newline$'
+            hint = findFormant.t - start_time_sound
         elif total_time < (6.4/100)
-            call skipSound 'listDir$'/'outFile$' skipped
+            hint = 0
         endif
+
+        #
+        #
+        #
+
+        if automatic #v10
+            if numPoints > 0 and total_time >= (6.4/100)
+                fileappend 'listDir$'/'outFile$' 'fileNameAbbrev$''tab$''mid_char$''tab$''findFormant.t:8''tab$''findFormant.v1f1:8''tab$''findFormant.v1f2:8''tab$''findFormant.v1f3:8''tab$''findFormant.pitch:8''newline$'
+            else
+                call skipSound 'listDir$'/'outFile$' skipped
+            endif
+        else #v4
+            select Sound 'fileNameAbbrev$'
+            file_duration = Get total duration
+            #Extract part: 0.1*file_duration, 0.9*file_duration, "rectangular", 1.0, 1
+            View & Edit
+            #fileNameAbbrev$ = fileNameAbbrev$ + "_part"
+
+            ## sound editor opens to allow user to choose midpoint of vowel for calculating F1->F3
+            editor Sound 'fileNameAbbrev$'
+                Formant settings... maxForm 5.0 formantWindLength 30.0 1.0
+                if hint <> 0
+                    Select... (hint-0.035) (hint+0.035)
+                beginPause ("Choose midpoint of vowel for formant on editor and click Continue")
+                buttonChosen = endPause ("Continue", "Skip", "Invalid file", 0)
+                #endPause: "Continue", 0
+                t = Get cursor
+            endeditor
+
+            ## click on Continue to view next sound file
+            if buttonChosen = 1
+
+                ## calculates F1, F2, F3
+                To Formant (burg)... 0 numberOfFormants maxForm formantWindLength 70
+                select Formant 'fileNameAbbrev$'
+
+                v1f1 = Get mean... 1 (t-0.035) (t+0.035) Hertz
+                v1f2 = Get mean... 2 (t-0.035) (t+0.035) Hertz
+                v1f3 = Get mean... 3 (t-0.035) (t+0.035) Hertz
+
+                ## find pitch
+                select Formant 'fileNameAbbrev$'
+                Remove
+                select Sound 'fileNameAbbrev$'
+                To Pitch... 0 pitchFloor pitchCeiling
+                pitch = Get mean... 0 0 Hertz
+
+                t = t + start_time_sound
+                ## output results
+                fileappend 'listDir$'/'outFile$' 'fileNameAbbrev$' 'tab$' 'mid_char$' 'tab$' 't:8' 'tab$' 'v1f1:8' 'tab$' 'v1f2:8' 'tab$' 'v1f3:8' 'tab$' 'pitch:8' 'newline$'
+
+            elif buttonChosen = 2
+                skipSound 'listDir$'/'outFile$' 'mid_char$''tab$'Skipped or separately checked
+            else
+                ## allows for skipping files
+                ## skip option available for empty sound files/other scenarios
+                skipSound 'listDir$'/'outFile$' 'mid_char$''tab$'Invalid file
+            endif
 
         select all
         minus strings
         Remove
     endfor
-    select strings
-    Remove
 
-    printline "***Formant analysis complete***"
-endproc
+select strings
+Remove
+
+printline "***Formant analysis complete***"
+
