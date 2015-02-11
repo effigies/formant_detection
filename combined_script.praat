@@ -169,13 +169,15 @@ procedure runSpeaker speakerx$
         #
         #
 
-        if automatic #v10
+        if automatic
+            # version 10 equivalent
             if numPoints > 0 and total_time >= (6.4/100)
                 fileappend 'listDir$'/'outFile$' 'fileNameAbbrev$''tab$''mid_char$''tab$''findFormant.t:8''tab$''findFormant.v1f1:8''tab$''findFormant.v1f2:8''tab$''findFormant.v1f3:8''tab$''findFormant.pitch:8''newline$'
             else
                 call skipSound 'listDir$'/'outFile$' skipped
             endif
-        else #v4
+        else
+            # version 4 equivalent
             select Sound 'fileNameAbbrev$'
             file_duration = Get total duration
             #Extract part: 0.1*file_duration, 0.9*file_duration, "rectangular", 1.0, 1
@@ -187,6 +189,7 @@ procedure runSpeaker speakerx$
                 Formant settings... maxForm 5.0 formantWindLength 30.0 1.0
                 if hint <> 0
                     Select... (hint-0.035) (hint+0.035)
+                endif
                 beginPause ("Choose midpoint of vowel for formant on editor and click Continue")
                 buttonChosen = endPause ("Continue", "Skip", "Invalid file", 0)
                 #endPause: "Continue", 0
@@ -222,6 +225,7 @@ procedure runSpeaker speakerx$
                 ## skip option available for empty sound files/other scenarios
                 skipSound 'listDir$'/'outFile$' 'mid_char$''tab$'Invalid file
             endif
+        endif
 
         select all
         minus strings
