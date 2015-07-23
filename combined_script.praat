@@ -12,7 +12,7 @@ form Formant Detection v4: Syllable Repetition Task
     text baseDirectory /share/qnl2/fMRI/syllable_repetition/formants.new/sound_files
     comment Enter metadata directory
     text metadataDirectory /share/qnl-linux1/fs_sess_metadata
-    choice speaker: 21
+    choice speaker: 2
         button All Speakers
         button All Subjects
         button All Stimuli
@@ -38,8 +38,10 @@ form Formant Detection v4: Syllable Repetition Task
         button Subject 16 (F)
         button Subject 17 (F)
     boolean automatic 0
+    boolean partial 1
+    boolean hints 1
     comment Output file name
-    text outFile formant-values-auto-v4.tsv
+    text outFile formant-values-cauto.tsv
     comment Enter window length for choosing time of F1 values:
     real chooseFWindLength 0.03
     comment Enter window length for formants
@@ -131,6 +133,7 @@ procedure runSpeaker speakerx$
 
         #remove dots that are not allowed in the file name
         fileNameAbbrev$ = replace$(fileNameAbbrev$, ".", "_", 0)
+        origFileNameAbbrev$ = fileNameAbbrev$
         Read from file... 'directory$'/'fileName$'
 
         ## determine syllable being processed based on file name
@@ -139,35 +142,39 @@ procedure runSpeaker speakerx$
         last_char$ = right$(word$, 1)
         mid_char$ = mid$(word$, 2, 1)
 
-        #
-        # Steal estimates from v10
-        #
         end_time_sound = Get total duration
         start_time_sound = 0
 
-        select Sound 'fileNameAbbrev$'
-        noprogress To PointProcess (periodic, cc)... 75 600
-        numPoints = Get number of points
+        if hints
+            #
+            # Steal estimates from v10
+            #
+            select Sound 'fileNameAbbrev$'
+            noprogress To PointProcess (periodic, cc)... 75 600
+            numPoints = Get number of points
 
-        #"noise" files tend to have 0 points
-        if numPoints <= 0
-            hint = 0
+            #"noise" files tend to have 0 points
+            if numPoints <= 0
+                hint = 0
+            else
+                call extractSound
+            endif
+
+            total_time = Get total duration
+
+            if numPoints > 0 and total_time >= (6.4/100)
+                call findFormant
+                hint = findFormant.t - start_time_sound
+                if partial = 0
+                    hint = hint + start_time_sound
+                    fileNameAbbrev$ = origFileNameAbbrev$
+                endif
+            elif total_time < (6.4/100)
+                hint = 0
+            endif
         else
-            call extractSound
-        endif
-
-        total_time = Get total duration
-
-        if numPoints > 0 and total_time >= (6.4/100)
-            call findFormant
-            hint = findFormant.t - start_time_sound
-        elif total_time < (6.4/100)
             hint = 0
         endif
-
-        #
-        #
-        #
 
         if automatic
             # version 10 equivalent
@@ -191,21 +198,33 @@ procedure runSpeaker speakerx$
                     Select... (hint-0.035) (hint+0.035)
                 endif
                 beginPause ("Choose midpoint of vowel for formant on editor and click Continue")
-                buttonChosen = endPause ("Continue", "Skip", "Invalid file", 0)
+                    natural ("Number of formants", 5)
+                #buttonChosen = endPause ("Continue", "Skip", "Invalid file", 0)
+                buttonChosen = endPause ("0.07s Window", "Manual Window", "Ignore", "Mark bad", 0)
                 #endPause: "Continue", 0
                 t = Get cursor
+                sel_start = Get start of selection
+                sel_end = Get end of selection
             endeditor
 
             ## click on Continue to view next sound file
-            if buttonChosen = 1
+            if buttonChosen = 1 or buttonChosen == 2
 
                 ## calculates F1, F2, F3
-                To Formant (burg)... 0 numberOfFormants maxForm formantWindLength 70
+                To Formant (burg)... 0 number_of_formants maxForm formantWindLength 70
                 select Formant 'fileNameAbbrev$'
 
-                v1f1 = Get mean... 1 (t-0.035) (t+0.035) Hertz
-                v1f2 = Get mean... 2 (t-0.035) (t+0.035) Hertz
-                v1f3 = Get mean... 3 (t-0.035) (t+0.035) Hertz
+                if buttonChosen = 1
+                    win_start = t - 0.035
+                    win_end = t + 0.035
+                else
+                    win_start = sel_start
+                    win_end = sel_end
+                endif
+
+                v1f1 = Get mean... 1 win_start win_end Hertz
+                v1f2 = Get mean... 2 win_start win_end Hertz
+                v1f3 = Get mean... 3 win_start win_end Hertz
 
                 ## find pitch
                 select Formant 'fileNameAbbrev$'
@@ -218,12 +237,12 @@ procedure runSpeaker speakerx$
                 ## output results
                 fileappend 'listDir$'/'outFile$' 'fileNameAbbrev$' 'tab$' 'mid_char$' 'tab$' 't:8' 'tab$' 'v1f1:8' 'tab$' 'v1f2:8' 'tab$' 'v1f3:8' 'tab$' 'pitch:8' 'newline$'
 
-            elif buttonChosen = 2
-                skipSound 'listDir$'/'outFile$' 'mid_char$''tab$'Skipped or separately checked
+            elif buttonChosen = 3
+                #call skipSound 'listDir$'/'outFile$' 'mid_char$''tab$'Skipped or separately checked
             else
                 ## allows for skipping files
                 ## skip option available for empty sound files/other scenarios
-                skipSound 'listDir$'/'outFile$' 'mid_char$''tab$'Invalid file
+                call skipSound 'listDir$'/'outFile$' 'mid_char$''tab$'Invalid file
             endif
         endif
 
@@ -232,8 +251,9 @@ procedure runSpeaker speakerx$
         Remove
     endfor
 
-select strings
-Remove
+    select strings
+    Remove
+endproc
 
 printline "***Formant analysis complete***"
 
